@@ -8,13 +8,14 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         printf("Usage: %s <input_file> <output_file>\n", argv[0]);
         return 1;
     }
 
-    pid_t pid1, pid2;
+    pid_t pid1, pid2, pid3;
     int fd1[2], fd2[2];
 
     if (pipe(fd1) < 0 || pipe(fd2) < 0) {
@@ -27,8 +28,6 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     } else if (pid1 == 0) { // first child process
         close(fd1[0]);
-        close(fd2[0]);
-        close(fd2[1]);
 
         int fd = open(argv[1], O_RDONLY);
         if (fd < 0) {
@@ -37,23 +36,23 @@ int main(int argc, char *argv[]) {
         }
 
         char buf[BUFSIZ];
-        ssize_t n;
+        ssize_t w;
 
-        while ((n = read(fd, buf, BUFSIZ)) > 0) {
-            if (write(fd1[1], buf, n) != n) {
+        while ((w = read(fd, buf, BUFSIZ)) > 0) {
+            if (write(fd1[1], buf, w) != w) {
                 perror("write");
                 exit(EXIT_FAILURE);
             }
         }
 
-        if (n < 0) {
+        if (w < 0) {
             perror("read");
             exit(EXIT_FAILURE);
         }
 
         close(fd1[1]);
 
- 	exit(EXIT_SUCCESS);
+        exit(EXIT_SUCCESS);
     }
 
     if ((pid2 = fork()) < 0) {
@@ -73,42 +72,48 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        execlp("./find_substring_indexes", "./gfind_substring_indexes", NULL);
+        execlp("./find_substring_indexes", "./find_substring_indexes", NULL);
 
         close(fd1[0]);
         close(fd2[1]);
     }
-
-    close(fd1[0]);
-    close(fd1[1]);
-    close(fd2[1]);
-
-    int fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-    if (fd < 0) {
-        perror("open");
+    if ((pid3 = fork()) < 0) {
+        perror("fork");
         exit(EXIT_FAILURE);
-    }
+    } else if (pid2 == 0) {
+        close(fd2[0]);
 
-    char buf[BUFSIZ];
-    ssize_t n;
-
-    while ((n = read(fd2[0], buf, BUFSIZ)) > 0) {
-        if (write(fd, buf, n) != n) {
-            perror("write");
+        int fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+        if (fd < 0) {
+            perror("open");
             exit(EXIT_FAILURE);
         }
-    }
 
-    if (n < 0) {
-        perror("read");
-        exit(EXIT_FAILURE);
-    }
+        char buf[BUFSIZ];
+        ssize_t r;
 
-    close(fd);
+        while ((r = read(fd2[0], buf, BUFSIZ)) > 0) {
+            if (write(fd, buf, r) != r) {
+                perror("write");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        if (r < 0) {
+            perror("read");
+            exit(EXIT_FAILURE);
+        }
+
+        close(fd);
+        close(fd2[0]);
+    }
+    close(fd1[0]);
+    close(fd1[1]);
     close(fd2[0]);
-
+    close(fd2[1]);
     waitpid(pid1, NULL, 0);
     waitpid(pid2, NULL, 0);
+    waitpid(pid3, NULL, 0);
 
     return 0;
 }
