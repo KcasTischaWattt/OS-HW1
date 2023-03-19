@@ -8,38 +8,41 @@
 #define SYNC_PIPE_NAME "sync_pipe"
 
 void call_func(const char *rpipe, const char *wpipe) {
-    if (dup2(open(rpipe, O_RDONLY), STDIN_FILENO) == -1 ||
-        dup2(open(wpipe, O_WRONLY), STDOUT_FILENO) == -1) {
+    int readfd = open(rpipe, O_RDONLY);
+    if (readfd == -1) {
+        perror("open rpipe");
+        exit(1);
+    }
+
+    int writefd = open(wpipe, O_WRONLY);
+    if (writefd == -1) {
+        perror("open wpipe");
+        exit(1);
+    }
+
+    if (dup2(readfd, STDIN_FILENO) == -1 ||
+        dup2(writefd, STDOUT_FILENO) == -1) {
         perror("dup2");
         exit(1);
     }
 
-    execlp("./find_substring_indexes", "./find_substring_indexes", (char *)NULL);
+    execlp("./find_substring_indexes", "find_substring_indexes", (char *)NULL);
     perror("execlp");
 }
 
-int main() {
-    int sync_pipe_fd = open(SYNC_PIPE_NAME, O_RDONLY);
-    if (sync_pipe_fd == -1) {
-        perror("open sync_pipe");
+void sync(const char *spipe) {
+    int syncfd = open(spipe, O_RDONLY);
+    if (syncfd == -1) {
+        perror("open spipe");
         exit(1);
     }
     char buffer;
-    read(sync_pipe_fd, &buffer, 1);
-    close(sync_pipe_fd);
+    read(syncfd, &buffer, 1);
+    close(syncfd);
+}
+
+int main() {
+    sync(SYNC_PIPE_NAME);
     call_func(PIPE1_NAME, PIPE2_NAME);
-
-    int rfd = open(PIPE1_NAME, O_RDONLY);
-    if (rfd == -1) {
-        perror("open read_pipe");
-        exit(1);
-    }
-
-    int wfd = open(PIPE2_NAME, O_WRONLY);
-    if (wfd == -1) {
-        perror("open write_pipe");
-        exit(1);
-    }
-
     return 0;
 }
