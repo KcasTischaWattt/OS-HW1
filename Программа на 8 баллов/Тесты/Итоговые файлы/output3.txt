@@ -1,0 +1,1 @@
+Substring found at indexes: 0 2 4 
