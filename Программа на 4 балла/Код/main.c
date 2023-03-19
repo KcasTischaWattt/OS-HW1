@@ -1,119 +1,92 @@
 #include <stdio.h>
-#include <ctype.h>
-#include <string.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
+#include <string.h>
+#include <sys/stat.h>
 
+void call_func(int read_fd, int write_fd) {
+    if (dup2(read_fd, STDIN_FILENO) == -1 || dup2(write_fd, STDOUT_FILENO) == -1) {
+        perror("dup2");
+        exit(1);
+    }
+
+    execlp("./find_substring_indexes", "find_substring_indexes", (char *)NULL);
+    perror("execlp");
+    exit(1);
+}
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
         printf("Usage: %s <input_file> <output_file>\n", argv[0]);
-        return 1;
+        exit(1);
     }
 
-    pid_t pid1, pid2, pid3;
-    int fd1[2], fd2[2];
-
-    if (pipe(fd1) < 0 || pipe(fd2) < 0) {
+    int pipe1[2], pipe2[2];
+    if (pipe(pipe1) == -1 || pipe(pipe2) == -1) {
         perror("pipe");
-        exit(EXIT_FAILURE);
+        exit(1);
     }
 
-    if ((pid1 = fork()) < 0) {
-        perror("fork");
-        exit(EXIT_FAILURE);
-    } else if (pid1 == 0) { // first child process
-        close(fd1[0]);
-
-        int fd = open(argv[1], O_RDONLY);
-        if (fd < 0) {
-            perror("open");
-            exit(EXIT_FAILURE);
+    pid_t chd1 = fork();
+    if (chd1 == 0) {
+        close(pipe1[0]);
+        char buffer[BUFSIZ];
+        int input_file = open(argv[1], O_RDONLY);
+        if (input_file == -1) {
+            perror("open input_file");
+            exit(1);
         }
 
-        char buf[BUFSIZ];
-        ssize_t w;
-
-        while ((w = read(fd, buf, BUFSIZ)) > 0) {
-            if (write(fd1[1], buf, w) != w) {
-                perror("write");
-                exit(EXIT_FAILURE);
-            }
+        int bread;
+        while ((bread = read(input_file, buffer, BUFSIZ)) > 0) {
+            write(pipe1[1], buffer, bread);
         }
 
-        if (w < 0) {
-            perror("read");
-            exit(EXIT_FAILURE);
-        }
-
-        close(fd1[1]);
-
-        exit(EXIT_SUCCESS);
+        close(input_file);
+        close(pipe1[1]);
+        exit(0);
     }
 
-    if ((pid2 = fork()) < 0) {
-        perror("fork");
-        exit(EXIT_FAILURE);
-    } else if (pid2 == 0) { // second child process
-        close(fd1[1]);
-        close(fd2[0]);
-
-        if (dup2(fd1[0], STDIN_FILENO) < 0) {
-            perror("dup2");
-            exit(EXIT_FAILURE);
-        }
-
-        if (dup2(fd2[1], STDOUT_FILENO) < 0) {
-            perror("dup2");
-            exit(EXIT_FAILURE);
-        }
-
-        execlp("./find_substring_indexes", "./find_substring_indexes", NULL);
-
-        close(fd1[0]);
-        close(fd2[1]);
+    pid_t chd2 = fork();
+    if (chd2 == 0) {
+        close(pipe1[1]);
+        close(pipe2[0]);
+        call_func(pipe1[0], pipe2[1]);
+        exit(0);
     }
-    if ((pid3 = fork()) < 0) {
-        perror("fork");
-        exit(EXIT_FAILURE);
-    } else if (pid2 == 0) {
-        close(fd2[0]);
 
-        int fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-        if (fd < 0) {
-            perror("open");
-            exit(EXIT_FAILURE);
+    pid_t chd3 = fork();
+    if (chd3 == 0) {
+        close(pipe1[0]);
+        close(pipe1[1]);
+        close(pipe2[1]);
+        char buffer[BUFSIZ];
+        int output_file = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (output_file == -1) {
+            perror("open output_file");
+            exit(1);
         }
 
-        char buf[BUFSIZ];
-        ssize_t r;
-
-        while ((r = read(fd2[0], buf, BUFSIZ)) > 0) {
-            if (write(fd, buf, r) != r) {
-                perror("write");
-                exit(EXIT_FAILURE);
-            }
+        int bread;
+        while ((bread = read(pipe2[0], buffer, BUFSIZ)) > 0) {
+            write(output_file, buffer, bread);
         }
-
-        if (r < 0) {
-            perror("read");
-            exit(EXIT_FAILURE);
-        }
-
-        close(fd);
-        close(fd2[0]);
+        close(output_file);
+        close(pipe2[0]);
+        exit(0);
     }
-    close(fd1[0]);
-    close(fd1[1]);
-    close(fd2[0]);
-    close(fd2[1]);
-    waitpid(pid1, NULL, 0);
-    waitpid(pid2, NULL, 0);
-    waitpid(pid3, NULL, 0);
+
+    close(pipe1[0]);
+    close(pipe1[1]);
+    close(pipe2[0]);
+    close(pipe2[1]);
+
+    waitpid(chd1, NULL, 0);
+    waitpid(chd2, NULL, 0);
+    waitpid(chd3, NULL, 0);
 
     return 0;
 }
