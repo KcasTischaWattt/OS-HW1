@@ -1,9 +1,9 @@
 # OS-HW1
 
 Другие работы:
-> [Семафоры ](https://github.com/KcasTischaWattt/OS-HW2)
-> [TCP](https://github.com/KcasTischaWattt/OS-HW3)
-> [UDP](https://github.com/KcasTischaWattt/OS-HW4)
+> * [Семафоры ](https://github.com/KcasTischaWattt/OS-HW2)
+> * [TCP](https://github.com/KcasTischaWattt/OS-HW3)
+> * [UDP](https://github.com/KcasTischaWattt/OS-HW4)
 
 ## Татауров Матвей Никитич БПИ 217
 ### Вариант 24
